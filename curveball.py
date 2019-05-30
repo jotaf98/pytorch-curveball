@@ -51,24 +51,22 @@ class CurveBall(Optimizer):
     loss = loss_fn(predictions_d)
 
     # compute J^T * z using FMAD (where z are the state variables)
-    #(Jz,) = fmad(predictions, parameters, zs)  # equivalent but slower
-    placeholder = t.zeros_like(predictions, requires_grad=True)
-    pred_grad = grad(predictions, parameters, grad_outputs=placeholder, create_graph=True)
-    (Jz,) = grad(pred_grad, placeholder, grad_outputs=zs, retain_graph=True)
+    (Jz,) = fmad(predictions, parameters, zs)  # equivalent but slower
     
     # compute loss gradient Jl, retaining the graph to allow 2nd-order gradients
     (Jl,) = grad(loss, predictions_d, create_graph=True)
+    Jl_d = Jl.detach()  # detached version, without requiring gradients
 
     # compute loss Hessian (projected by Jz) using 2nd-order gradients
     (Hl_Jz,) = grad(Jl, predictions_d, grad_outputs=Jz, retain_graph=True)
 
     # compute J * (Hl_Jz + Jl) using RMAD (back-propagation).
     # note this is still missing the lambda * z term.
-    delta_zs = grad(predictions, parameters, Hl_Jz + Jl, retain_graph=True)
+    delta_zs = grad(predictions, parameters, Hl_Jz + Jl_d, retain_graph=True)
     
     # add lambda * z term to the result, obtaining the final steps delta_zs
     for (z, dz) in zip(zs, delta_zs):
-      dz.add_(lambd, z)
+      dz.data.add_(lambd, z)
 
 
     #
@@ -80,8 +78,7 @@ class CurveBall(Optimizer):
 
     if momentum < 0 or lr < 0 or group['auto_lambda']:  # required by auto-lambda
       # compute J^T * delta_zs
-      #(Jdeltaz,) = fmad(predictions, parameters, delta_zs)  # equivalent but slower
-      (Jdeltaz,) = grad(pred_grad, placeholder, grad_outputs=delta_zs)
+      (Jdeltaz,) = fmad(predictions, parameters, delta_zs)  # equivalent but slower
 
       # project result by loss hessian (using 2nd-order gradients)
       (Hl_Jdeltaz,) = grad(Jl, predictions_d, grad_outputs=Jdeltaz)
@@ -95,8 +92,8 @@ class CurveBall(Optimizer):
       a12 = lambd * (dz_vec * z_vec).sum() + (Jz * Hl_Jdeltaz).sum()
       a22 = lambd * (z_vec * z_vec).sum() + (Jz * Hl_Jz).sum()
 
-      b1 = (Jl * Jdeltaz).sum()
-      b2 = (Jl * Jz).sum()
+      b1 = (Jl_d * Jdeltaz).sum()
+      b2 = (Jl_d * Jz).sum()
 
       # item() implicitly moves to the CPU
       A = t.tensor([[a11.item(), a12.item()], [a12.item(), a22.item()]])
@@ -112,7 +109,7 @@ class CurveBall(Optimizer):
     #
 
     for (p, z, dz) in zip(parameters, zs, delta_zs):
-      z.mul_(momentum).add_(-lr, dz)  # update state
+      z.data.mul_(momentum).add_(-lr, dz)  # update state
       p.data.add_(z)  # update parameter
 
 
@@ -147,8 +144,7 @@ class CurveBall(Optimizer):
 
 def fmad(ys, xs, dxs):
   """Forward-mode automatic differentiation."""
-  assert not isinstance(ys, t.Tensor)
-  v = [t.zeros_like(y, requires_grad=True) for y in ys]
+  v = t.zeros_like(ys, requires_grad=True)
   g = grad(ys, xs, grad_outputs=v, create_graph=True)
   return grad(g, v, grad_outputs=dxs)
 
