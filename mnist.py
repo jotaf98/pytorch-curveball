@@ -160,11 +160,15 @@ def main():
 
   # insert batch norm layers
   if not args.no_batch_norm:
-    for (idx, layer) in enumerate(layers[:]):
-      if isinstance(layer, nn.Conv2d):
-        layers.insert(idx + 1, nn.BatchNorm2d(layer.out_channels))
-      elif isinstance(layer, nn.Linear):
-        layers.insert(idx + 1, nn.BatchNorm1d(layer.out_features))
+    last = True
+    for (idx, layer) in reversed(list(enumerate(layers))):
+      if last and isinstance(layer, (nn.Conv2d, nn.Linear)):
+        last = False  # do not insert batch-norm after last linear/conv layer
+      else:
+        if isinstance(layer, nn.Conv2d):
+          layers.insert(idx + 1, nn.BatchNorm2d(layer.out_channels))
+        elif isinstance(layer, nn.Linear):
+          layers.insert(idx + 1, nn.BatchNorm1d(layer.out_features))
 
   model = nn.Sequential(*layers)
   model.to(device)
