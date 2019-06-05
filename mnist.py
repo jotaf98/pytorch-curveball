@@ -89,30 +89,30 @@ def main():
   # Training settings
   parser = argparse.ArgumentParser()
   parser.add_argument("experiment", nargs='?', default="")
-  parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+  parser.add_argument('-batch-size', type=int, default=64, metavar='N',
             help='input batch size for training (default: 64)')
-  parser.add_argument('--test-batch-size', type=int, default=1000,
+  parser.add_argument('-test-batch-size', type=int, default=1000,
             help='input batch size for testing (default: 1000)')
-  parser.add_argument('--epochs', type=int, default=10,
+  parser.add_argument('-epochs', type=int, default=10,
             help='number of epochs to train (default: 10)')
-  parser.add_argument('--loss', choices=['crossentropy', 'mse'], default='crossentropy',
+  parser.add_argument('-loss', choices=['crossentropy', 'mse'], default='crossentropy',
             help='loss function')
-  parser.add_argument('--optimizer', choices=['sgd', 'adam', 'curveball'], default='curveball',
+  parser.add_argument('-optimizer', choices=['sgd', 'adam', 'curveball'], default='curveball',
             help='optimizer (sgd, adam, or curveball)')
-  parser.add_argument('--lr', type=float, default=-1, metavar='LR',
+  parser.add_argument('-lr', type=float, default=-1, metavar='LR',
             help='learning rate (default: 0.01 for SGD, 0.001 for Adam, 1 for CurveBall)')
-  parser.add_argument('--momentum', type=float, default=-1, metavar='M',
+  parser.add_argument('-momentum', type=float, default=-1, metavar='M',
             help='momentum (default: 0.5)')
-  parser.add_argument('--lambda', type=float, default=1.0,
+  parser.add_argument('-lambda', type=float, default=1.0,
             help='lambda')
   parser.add_argument('--no-auto-lambda', action='store_true', default=False,
             help='disables automatic lambda estimation')
   parser.add_argument('--no-batch-norm', action='store_true', default=False)
   parser.add_argument('--no-cuda', action='store_true', default=False,
             help='disables CUDA training')
-  parser.add_argument('--seed', type=int, default=1, metavar='S',
+  parser.add_argument('-seed', type=int, default=1, metavar='S',
             help='random seed (default: 1)')
-  parser.add_argument('--datadir', type=str, default='C:\\data\\mnist\\',
+  parser.add_argument('-datadir', type=str, default='C:\\data\\mnist\\',
             help='MNIST data directory')
   parser.add_argument('--outputdir', type=str, default='C:\\data\\mnist-experiments\\',
             help='output directory')
