@@ -2,7 +2,6 @@
 from __future__ import print_function
 
 import torch
-import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import torch.backends.cudnn as cudnn
@@ -10,7 +9,7 @@ import torch.backends.cudnn as cudnn
 import torchvision
 import torchvision.transforms as transforms
 
-import os, sys, argparse, shutil
+import os, argparse, shutil
 from time import time
 
 from curveball import CurveBall
@@ -20,6 +19,7 @@ import models
 try:
   from overboard import Logger
 except ImportError:
+  print('Warning: OverBoard not installed, no logging/plotting will be performed. See https://pypi.org/project/overboard/')
   Logger = None
 
 
@@ -52,9 +52,10 @@ def train(args, net, device, train_loader, optimizer, epoch, logger):
       logger.update_average(stats)
       if logger.avg_count['train.loss'] > 3:  # skip first 3 iterations (warm-up time)
         logger.update_average({'train.time': time() - start})
-      logger.print(prefix='train')
+      logger.print(line_prefix='ep %i ' % epoch, prefix='train')
     else:
       print(stats)
+
 
 def test(args, net, device, test_loader, logger):
   net.eval()
@@ -79,10 +80,13 @@ def test(args, net, device, test_loader, logger):
       else:
         print(stats)
 
+
 def main():
+  all_models = [name for name in dir(models) if callable(getattr(models, name))]
+
   parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
-  parser.add_argument("experiment", nargs='?', default="")
-  parser.add_argument('-model', choices=dir(models), default='BasicNetBN')  #ResNet18
+  parser.add_argument("experiment", nargs='?', default="test")
+  parser.add_argument('-model', choices=all_models, default='BasicNetBN')  #ResNet18
   parser.add_argument('-optimizer', choices=['sgd', 'adam', 'curveball'], default='curveball')  
   parser.add_argument('-lr', default=-1, type=float, help='learning rate')
   parser.add_argument('-momentum', type=float, default=-1, metavar='M')
@@ -92,8 +96,9 @@ def main():
   parser.add_argument('-epochs', default=200, type=int)
   parser.add_argument('-save-interval', default=10, type=int)
   parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
-  parser.add_argument('-outputdir', default='C:\data\cifar-experiments', type=str)
-  parser.add_argument('-datadir', default='C:\data\cifar', type=str)
+  parser.add_argument('-outputdir', default='data/cifar-experiments', type=str)
+  parser.add_argument('-datadir', default='data/cifar', type=str)
+  parser.add_argument('-device', default='cuda', type=str)
   parser.add_argument('--parallel', action='store_true', default=False)
   args = parser.parse_args()
 
@@ -102,13 +107,13 @@ def main():
   if os.path.isdir(args.outputdir):
     input('Directory already exists. Press Enter to overwrite or Ctrl+C to cancel.')
 
-  device = 'cuda' if torch.cuda.is_available() else 'cpu'
+  if not torch.cuda.is_available(): args.device = 'cpu'
   best_acc = 0  # best test accuracy
   start_epoch = 0  # start from epoch 0 or last checkpoint epoch
 
   # data
   transform_train = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
+    transforms.RandomCrop(32, padding=2, fill=(128, 128, 128)),
     transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
@@ -129,8 +134,8 @@ def main():
 
   # model
   net = getattr(models, args.model)()
-  net = net.to(device)
-  if device == 'cuda' and args.parallel:
+  net = net.to(args.device)
+  if args.device != 'cpu' and args.parallel:
     net = torch.nn.DataParallel(net)
     cudnn.benchmark = True
 
@@ -146,7 +151,7 @@ def main():
   # optimizer
   if args.optimizer == 'sgd':
     if args.lr < 0: args.lr = 0.1
-    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
+    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9)
     
   elif args.optimizer == 'adam':
     if args.lr < 0: args.lr = 0.001
@@ -163,8 +168,8 @@ def main():
   if Logger: logger = Logger(args.outputdir, meta=args, resume=args.resume)
 
   for epoch in range(start_epoch, args.epochs):
-    train(args, net, device, train_loader, optimizer, epoch, logger)
-    test(args, net, device, test_loader, logger)
+    train(args, net, args.device, train_loader, optimizer, epoch, logger)
+    test(args, net, args.device, test_loader, logger)
     
     if logger:
       acc = logger.average()['val.accuracy']

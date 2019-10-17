@@ -1,12 +1,12 @@
 
 import torch as t
-import torch.nn.functional as F
 from torch.optim.optimizer import Optimizer
 from torch.autograd import grad
 
 
 class CurveBall(Optimizer):
   """CurveBall optimizer"""
+  
   def __init__(self, params, lr=None, momentum=None, auto_lambda=True, lambd=10.0,
       lambda_factor=0.999, lambda_low=0.5, lambda_high=1.5, lambda_interval=5):
     
@@ -14,6 +14,7 @@ class CurveBall(Optimizer):
       lambd=lambd, lambda_factor=lambda_factor, lambda_low=lambda_low,
       lambda_high=lambda_high, lambda_interval=lambda_interval)
     super().__init__(params, defaults)
+
 
   def step(self, model_fn, loss_fn):
     """Performs a single optimization step"""

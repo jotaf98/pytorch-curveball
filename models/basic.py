@@ -34,14 +34,26 @@ def BasicNet(batch_norm=False):
 
   # insert batch norm layers
   if batch_norm:
-    last = True
-    for (idx, layer) in reversed(list(enumerate(layers))):
-      if last and isinstance(layer, (nn.Conv2d, nn.Linear)):
+    insert_bnorm(layers, init_gain=True, eps=1e-4)
+
+  return nn.Sequential(*layers)
+
+
+def insert_bnorm(layers, init_gain=False, eps=1e-5, ignore_last_layer=True):
+  """Inserts batch-norm layers after each convolution/linear layer in a list of layers."""
+  last = True
+  for (idx, layer) in reversed(list(enumerate(layers))):
+    if isinstance(layer, (nn.Conv2d, nn.Linear)):
+      if ignore_last_layer and last:
         last = False  # do not insert batch-norm after last linear/conv layer
       else:
         if isinstance(layer, nn.Conv2d):
-          layers.insert(idx + 1, nn.BatchNorm2d(layer.out_channels))
+          bnorm = nn.BatchNorm2d(layer.out_channels, eps=eps)
         elif isinstance(layer, nn.Linear):
-          layers.insert(idx + 1, nn.BatchNorm1d(layer.out_features))
+          bnorm = nn.BatchNorm1d(layer.out_features, eps=eps)
+        
+        if init_gain:
+          bnorm.weight.data[:] = 1.0  # instead of uniform sampling
 
-  return nn.Sequential(*layers)
+        layers.insert(idx + 1, bnorm)
+  return layers

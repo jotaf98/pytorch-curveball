@@ -2,7 +2,7 @@
 # Modified version of the PyTorch MNIST example to log outputs for OverBoard
 
 from __future__ import print_function
-import argparse, sys, os
+import argparse, os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,9 +10,16 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from time import time
 
+from models.basic import insert_bnorm
+
 from curveball import CurveBall
 
-from overboard import Logger
+try:
+  from overboard import Logger
+except ImportError:
+  print('Warning: OverBoard not installed, no logging/plotting will be performed. See https://pypi.org/project/overboard/')
+  Logger = None
+
 
 class Flatten(nn.Module):
   def forward(self, input):
@@ -24,40 +31,40 @@ def onehot(target, like):
   out.scatter_(1, target.unsqueeze(1), 1.0)
   return out
 
+
 def train(args, model, device, train_loader, optimizer, epoch, logger):
   model.train()
   for batch_idx, (data, target) in enumerate(train_loader):
     start = time()
     data, target = data.to(device), target.to(device)
 
-    if args.loss == 'crossentropy':
-      # create closures to compute the forward pass, and the loss
-      model_fn = lambda: model(data)
-      loss_fn = lambda pred: F.cross_entropy(pred, target)
-    else:
-      # MSE requires converting numeric labels to one-hot regression targets
-      model_fn = lambda: F.softmax(model(data), dim=1)
-      loss_fn = lambda pred: F.mse_loss(pred, onehot(target, pred))
+    # create closures to compute the forward pass, and the loss
+    model_fn = lambda: model(data)
+    loss_fn = lambda pred: F.cross_entropy(pred, target)
 
     if isinstance(optimizer, CurveBall):
       (loss, predictions) = optimizer.step(model_fn, loss_fn)
     else:
+      # standard optimizer
+      optimizer.zero_grad()
       predictions = model_fn()
       loss = loss_fn(predictions)
       loss.backward()
       optimizer.step()
-      optimizer.zero_grad()
     
     pred = predictions.max(1, keepdim=True)[1]  # get the index of the max log-probability
     accuracy = pred.eq(target.view_as(pred)).double().mean()
     
     # log the loss and accuracy
-    logger.update_average({'train.loss': loss.item(), 'train.accuracy': accuracy.item()})
+    stats = {'train.loss': loss.item(), 'train.accuracy': accuracy.item()}
+    if logger:
+      logger.update_average(stats)
+      if logger.avg_count['train.loss'] > 3:  # skip first 3 iterations (warm-up time)
+        logger.update_average({'train.time': time() - start})
+      logger.print(line_prefix='ep %i ' % epoch, prefix='train')
+    else:
+      print(stats)
 
-    if logger.avg_count['train.loss'] > 3:  # skip first 3 iterations (warm-up time)
-      logger.update_average({'train.time': time() - start})
-
-    logger.print(prefix='train')
 
 def test(args, model, device, test_loader, logger):
   model.eval()
@@ -66,37 +73,35 @@ def test(args, model, device, test_loader, logger):
       start = time()
       data, target = data.to(device), target.to(device)
       predictions = model(data)
-        
-      if args.loss == 'crossentropy':
-        loss = F.cross_entropy(predictions, target)
-      else:
-        predictions = F.softmax(predictions, dim=1)
-        loss = F.mse_loss(predictions, onehot(target, predictions))
+
+      loss = F.cross_entropy(predictions, target)
 
       pred = predictions.max(1, keepdim=True)[1]  # get the index of the max log-probability
       accuracy = pred.eq(target.view_as(pred)).double().mean()
 
       # log the loss and accuracy
-      logger.update_average({'val.loss': loss.item(), 'val.accuracy': accuracy.item()})
-
-      if logger.avg_count['val.loss'] > 3:  # skip first 3 iterations (warm-up time)
-        logger.update_average({'val.time': time() - start})
+      stats = {'val.loss': loss.item(), 'val.accuracy': accuracy.item()}
+      if logger:
+        logger.update_average(stats)
+        if logger.avg_count['val.loss'] > 3:  # skip first 3 iterations (warm-up time)
+          logger.update_average({'val.time': time() - start})
+      else:
+        print(stats)        
 
   # display final values in console
-  logger.print(prefix='val')
+  if logger: logger.print(prefix='val')
+
 
 def main():
   # Training settings
   parser = argparse.ArgumentParser()
-  parser.add_argument("experiment", nargs='?', default="")
+  parser.add_argument("experiment", nargs='?', default="test")
   parser.add_argument('-batch-size', type=int, default=64, metavar='N',
             help='input batch size for training (default: 64)')
   parser.add_argument('-test-batch-size', type=int, default=1000,
             help='input batch size for testing (default: 1000)')
   parser.add_argument('-epochs', type=int, default=10,
             help='number of epochs to train (default: 10)')
-  parser.add_argument('-loss', choices=['crossentropy', 'mse'], default='crossentropy',
-            help='loss function')
   parser.add_argument('-optimizer', choices=['sgd', 'adam', 'curveball'], default='curveball',
             help='optimizer (sgd, adam, or curveball)')
   parser.add_argument('-lr', type=float, default=-1, metavar='LR',
@@ -112,13 +117,13 @@ def main():
             help='disables CUDA training')
   parser.add_argument('-seed', type=int, default=1, metavar='S',
             help='random seed (default: 1)')
-  parser.add_argument('-datadir', type=str, default='C:\\data\\mnist\\',
+  parser.add_argument('-datadir', type=str, default='data/mnist',
             help='MNIST data directory')
-  parser.add_argument('--outputdir', type=str, default='C:\\data\\mnist-experiments\\',
+  parser.add_argument('-outputdir', type=str, default='data/mnist-experiments',
             help='output directory')
   args = parser.parse_args()
   use_cuda = not args.no_cuda and torch.cuda.is_available()
-  args.outputdir += '/' + args.loss + '/' + args.optimizer + '/' + args.experiment
+  args.outputdir += '/' + args.optimizer + '/' + args.experiment
 
   if os.path.isdir(args.outputdir):
     input('Directory already exists. Press Enter to overwrite or Ctrl+C to cancel.')
@@ -159,16 +164,7 @@ def main():
   ]
 
   # insert batch norm layers
-  if not args.no_batch_norm:
-    last = True
-    for (idx, layer) in reversed(list(enumerate(layers))):
-      if last and isinstance(layer, (nn.Conv2d, nn.Linear)):
-        last = False  # do not insert batch-norm after last linear/conv layer
-      else:
-        if isinstance(layer, nn.Conv2d):
-          layers.insert(idx + 1, nn.BatchNorm2d(layer.out_channels))
-        elif isinstance(layer, nn.Linear):
-          layers.insert(idx + 1, nn.BatchNorm1d(layer.out_features))
+  if not args.no_batch_norm: insert_bnorm(layers)
 
   model = nn.Sequential(*layers)
   model.to(device)
