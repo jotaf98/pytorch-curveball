@@ -8,11 +8,13 @@ class CurveBall(Optimizer):
   """CurveBall optimizer"""
   
   def __init__(self, params, lr=None, momentum=None, auto_lambda=True, lambd=10.0,
-      lambda_factor=0.999, lambda_low=0.5, lambda_high=1.5, lambda_interval=5):
+      lambda_factor=0.999, lambda_low=0.5, lambda_high=1.5, lambda_interval=5,
+      interleave=0, interleave_rate=0.5):
     
     defaults = dict(lr=lr, momentum=momentum, auto_lambda=auto_lambda,
       lambd=lambd, lambda_factor=lambda_factor, lambda_low=lambda_low,
-      lambda_high=lambda_high, lambda_interval=lambda_interval)
+      lambda_high=lambda_high, lambda_interval=lambda_interval,
+      interleave=interleave, interleave_rate=interleave_rate)
     super().__init__(params, defaults)
 
 
@@ -41,6 +43,31 @@ class CurveBall(Optimizer):
     # get lambda estimate, or initial lambda (user hyper-parameter) if it's not set
     lambd = global_state.get('lambd', group['lambd'])
     
+
+    #
+    # perform interleaved SGD step instead of CurveBall if needed
+    #
+
+    if group['interleave'] != 0 and global_state['count'] % group['interleave'] != 0:
+      self.zero_grad()
+      predictions = model_fn()
+      loss = loss_fn(predictions)
+      loss.backward()
+
+      for p in parameters:
+        if p.grad is None:
+          continue
+        param_state = state[p]
+        if 'momentum_buffer' not in param_state:
+          buf = param_state['momentum_buffer'] = t.zeros_like(p.data)
+        else:
+          buf = param_state['momentum_buffer']
+        buf.mul_(global_state['momentum']).add_(p.grad.data)
+        p.data.add_(-global_state['lr'], buf)
+      
+      global_state['count'] += 1
+      return (loss, predictions)
+
 
     #
     # compute CurveBall step (delta_zs)
@@ -103,6 +130,11 @@ class CurveBall(Optimizer):
 
       lr = auto_params[0].item()
       momentum = -auto_params[1].item()
+
+    if group['interleave'] != 0:  # update LR/momentum hyper-parameters for interleaved SGD steps
+      gamma = group['interleave_rate']
+      global_state['lr'] = global_state.get('lr', 0.0) * (1.0 - gamma) + gamma * lr
+      global_state['momentum'] = global_state.get('momentum', 0.0) * (1.0 - gamma) + gamma * momentum
 
 
     #
