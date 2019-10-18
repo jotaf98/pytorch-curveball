@@ -60,7 +60,7 @@ Note that, unlike gradient-based optimizers like SGD, there's no need to run the
 
 # Full example
 
-See `cifar.py` or `mnist.py`.
+See `examples/cifar.py` or `examples/mnist.py`.
 
 
 # Author

@@ -8,9 +8,10 @@ import torch.nn.functional as F
 import torchvision
 import torchvision.transforms as transforms
 
-import os, argparse, shutil
+import os, argparse, shutil, sys
 from time import time
 
+sys.path.append(os.path.dirname(__file__) + '/..')  # import from parent directory
 from curveball import CurveBall
 
 import models
