@@ -4,7 +4,6 @@ from __future__ import print_function
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
-import torch.backends.cudnn as cudnn
 
 import torchvision
 import torchvision.transforms as transforms
@@ -134,10 +133,11 @@ def main():
 
   # model
   net = getattr(models, args.model)()
+
   net = net.to(args.device)
   if args.device != 'cpu' and args.parallel:
     net = torch.nn.DataParallel(net)
-    cudnn.benchmark = True
+  torch.backends.cudnn.benchmark = True  # slightly faster for fixed batch/input sizes
 
   if args.resume:
     # load checkpoint
