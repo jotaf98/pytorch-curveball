@@ -170,8 +170,8 @@ class CurveBall(Optimizer):
           if ratio > group['lambda_high']: lambd *= factor
           
           global_state['lambd'] = lambd
-      global_state['count'] += 1
 
+    global_state['count'] += 1
     return (loss, predictions)
 
 
