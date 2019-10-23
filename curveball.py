@@ -9,12 +9,15 @@ class CurveBall(Optimizer):
   
   def __init__(self, params, lr=None, momentum=None, auto_lambda=True, lambd=10.0,
       lambda_factor=0.999, lambda_low=0.5, lambda_high=1.5, lambda_interval=5,
-      interleave=0, interleave_rate=0.5):
+      interleave=0, interleave_window=100):
     
+    if auto_lambda and interleave and lambda_interval % interleave != 0:
+      raise ValueError('CurveBall: auto-lambda interval should be divisible by interleaving interval.')
+
     defaults = dict(lr=lr, momentum=momentum, auto_lambda=auto_lambda,
       lambd=lambd, lambda_factor=lambda_factor, lambda_low=lambda_low,
       lambda_high=lambda_high, lambda_interval=lambda_interval,
-      interleave=interleave, interleave_rate=interleave_rate)
+      interleave=interleave, interleave_window=interleave_window)
     super().__init__(params, defaults)
 
 
@@ -132,10 +135,11 @@ class CurveBall(Optimizer):
       momentum = -auto_params[1].item()
 
     if group['interleave'] != 0:  # update LR/momentum hyper-parameters for interleaved SGD steps
-      gamma = group['interleave_rate']
+      # set adaptation rate to (approx.) achieve a rolling average over the specified time window
+      gamma = 1.0 / max(global_state['count'] + 1, group['interleave_window'])
+
       global_state['lr'] = global_state.get('lr', 0.0) * (1.0 - gamma) + gamma * lr
       global_state['momentum'] = global_state.get('momentum', 0.0) * (1.0 - gamma) + gamma * momentum
-
 
     #
     # update parameters and state in-place: z = momentum * z + lr * delta_z; p = p + z

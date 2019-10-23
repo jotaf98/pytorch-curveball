@@ -92,8 +92,9 @@ def main():
   parser.add_argument('-momentum', type=float, default=-1, metavar='M')
   parser.add_argument('-lambda', type=float, default=1.0)
   parser.add_argument('--no-auto-lambda', action='store_true', default=False, help='disables automatic lambda estimation')
+  parser.add_argument('-lambda-interval', default=5, type=int)
   parser.add_argument('-interleave', default=5, type=int)
-  parser.add_argument('-interleave-rate', type=float, default=0.1)
+  parser.add_argument('-interleave-window', type=int, default=100)
   parser.add_argument('-batch-size', default=128, type=int)
   parser.add_argument('-epochs', default=200, type=int)
   parser.add_argument('-save-interval', default=10, type=int)
@@ -165,7 +166,7 @@ def main():
     #if args.momentum < 0: args.momentum = 0.9
     lambd = getattr(args, 'lambda')
 
-    optimizer = CurveBall(net.parameters(), lr=args.lr, momentum=args.momentum, lambd=lambd, auto_lambda=not args.no_auto_lambda, interleave=args.interleave, interleave_rate=args.interleave_rate)
+    optimizer = CurveBall(net.parameters(), lr=args.lr, momentum=args.momentum, lambd=lambd, auto_lambda=not args.no_auto_lambda, lambda_interval=args.lambda_interval, interleave=args.interleave, interleave_window=args.interleave_window)
 
   logger = None
   if Logger: logger = Logger(args.outputdir, meta=args, resume=args.resume)
