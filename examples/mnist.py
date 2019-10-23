@@ -12,7 +12,7 @@ from time import time
 
 from models.basic import insert_bnorm
 
-sys.path.append(os.path.dirname(__file__) + '/..')  # import from parent directory
+sys.path.append(os.path.dirname(os.path.realpath(__file__)) + '/..')  # import from parent directory
 from curveball import CurveBall
 
 try:
