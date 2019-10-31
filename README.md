@@ -12,7 +12,7 @@ Unfortunately, the PyTorch operations used for forward-mode automatic differenti
 
 For this reason, it is not as fast as the original Matlab implementation or this [TensorFlow](https://github.com/hyenal/curveball-tf) port.
 
-This is something that we hope to resolve quickly, either by the PyTorch bug getting fixed, or by implementing a CurveBall variant that is inherently faster despite the slow operations. Other suggested fixes are very welcome.
+You can find an experimental version in the `interleave` branch that achieves much higher speed despite this problem (by interleaving the CurveBall steps with SGD). Other suggested fixes are very welcome.
 
 
 ## Requirements
